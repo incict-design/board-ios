@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iPhoneだけで作った掲示板</title>
+<style>
+  /* 掲示板全体の幅を広げる（650px -> 750px） */
+  body { 
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; 
+    max-width: 750px; 
+    margin: 0 auto; 
+    padding: 20px; 
+    background: #f0f0f0; 
+    visibility: hidden; /* 認証チェック完了まで非表示 */
+  }
+  h1 { font-size: 24px; text-align: center; margin-bottom: 20px; }
+  label { font-weight: bold; display: block; margin-top: 12px; }
+  input, textarea { width: 100%; padding: 10px; margin-top: 6px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-size: 16px; }
+  button { padding: 10px 20px; margin-top: 12px; border: none; border-radius: 6px; background-color: #4CAF50; color: white; font-size: 16px; cursor: pointer; }
+  button:hover { background-color: #45a049; }
+  h2 { margin-top: 30px; font-size: 20px; }
+  .btn-sm { font-size: 12px; padding: 4px 8px; margin-right: 6px; background: #555; border-radius: 4px; color: #fff; }
+  .btn-del { background: #d9534f; }
+
+  /* 認証エリア */
+  #authArea { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+
+  /* ボタンの高さを揃えるための修正 */
+  .header-actions { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; /* 垂直方向の中央揃え */
+    margin-bottom: 20px; 
+    margin-top: 20px;
+  }
+  
+  #logoutBtn {
+    background: #777;
+    margin-top: 0; /* Flexコンテナの子要素としてマージンをリセット */
+  }
+
+  /* スレッド一覧 */
+  #threadListContainer { margin-top: 20px; }
+  .thread-item { background: #fff; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: pointer; border-left: 5px solid #0366d6; }
+  .thread-item:hover { background: #f9f9f9; }
+  .thread-item h3 { font-size: 18px; margin: 0 0 5px 0; color: #333; }
+  .thread-meta { color: #777; font-size: 13px; }
+  .btn-thread { background: #0366d6; margin-left: 10px; margin-top: 0; }
+
+  /* スレッド詳細（投稿一覧） */
+  #replies { margin-top: 12px; }
+  .reply { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .reply .name { font-weight: bold; margin-bottom: 4px; }
+  .reply .time { color: #777; font-size: 12px; margin-bottom: 6px; }
+  .reply .content { white-space: pre-wrap; }
+  #postReplyArea { background: #fff; padding: 15px; border-radius: 8px; margin-top: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+  /* スレッド作成フォーム */
+  #threadFormContainer { background: #e6f7ff; padding: 15px; border-radius: 8px; margin-top: 15px; }
+
+  /* 共通メッセージ */
+  #message, #postMessage, #threadMessage { margin-top: 12px; font-size: 14px; min-height: 18px; }
+</style>
+</head>
+<body>
+
+<h1>iPhoneだけで作った掲示板</h1>
+
+<input type="text" style="display:none">
+<input type="password" style="display:none">
+
+<div id="authArea">
+  <h2>ログイン / 新規登録</h2>
+  <form autocomplete="off">
+    <label>表示名 (新規登録時のみ入力)</label>
+    <input id="displayName" type="text" placeholder="名前 (必須)">
+
+
+  <h4>表示名はログイン時の入力は不要です</h4>
+
+
+
+
+    
+    <label>メールアドレス</label>
+    <input id="email" type="email" placeholder="メールアドレス" autocomplete="off">
+    <label>パスワード</label>
+    <input id="password" type="password" placeholder="パスワード" autocomplete="new-password">
+  </form>
+  <button id="loginBtn">ログイン</button>
+  <button id="registerBtn">新規登録（確認メール送信）</button>
+
+
+<h3>迷惑メールフォルダも要確認</h3>
+
+  <button id="resetBtn" style="background:#888;">パスワード再設定</button>
+  <div id="message" style="color:red;"></div>
+</div>
+
+<div id="mainArea" style="display:none;">
+
+  <div class="header-actions">
+    <button id="newThreadBtn" class="btn-thread">新しいスレッドを立てる</button>
+    <button id="logoutBtn">ログアウト</button>
+  </div>
+  <div id="threadMessage" style="color:red;"></div>
+
+  <div id="threadFormContainer" style="display:none;">
+    <h2>スレッド作成</h2>
+    <label>スレッドタイトル</label>
+    <input id="threadTitle" type="text" placeholder="スレッドタイトル（必須）">
+    
+    <label>最初の投稿者名 (登録名が自動設定されます)</label>
+    <input id="name" type="text" disabled placeholder="お名前">
+    
+    <label>最初の投稿内容</label>
+    <textarea id="firstPostText" rows="4" placeholder="最初の書き込み内容"></textarea>
+    <button id="createThreadBtn">スレッドを作成</button>
+  </div>
+
+  <div id="threadListContainer">
+    <h2>スレッド一覧</h2>
+    <div id="threads">読み込み中...</div>
+  </div>
+
+  <div id="threadView" style="display:none;">
+    <h2 id="currentThreadTitle"></h2>
+    <button id="backToThreadsBtn" style="background:#555;">← スレッド一覧に戻る</button>
+
+    <div id="replies"></div>
+
+    <div id="postReplyArea">
+      <label>本文</label>
+      <textarea id="replyText" rows="4" placeholder="レスポンス内容"></textarea>
+      <button id="postReplyBtn">投稿する</button>
+      <div id="postMessage" style="color:red;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+// Firebase 初期化
+const firebaseConfig = {
+  apiKey: "AIzaSyCt3LK6d44bmnCOodXvvYzfMqTXQlUUhRM",
+  authDomain: "kuni-d813a.firebaseapp.com",
+  databaseURL: "https://kuni-d813a-default-rtdb.firebaseio.com",
+  projectId: "kuni-d813a",
+  storageBucket: "kuni-d813a.appspot.com",
+  messagingSenderId: "237500926583",
+  appId: "1:237500926583:web:55c13cc28ef4547d019472"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+// threadsコレクションに変更
+const threadsRef = db.collection("threads");
+
+// UIエレメント
+const displayNameInput = document.getElementById("displayName"); 
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const messageDiv = document.getElementById("message");
+const postMessageDiv = document.getElementById("postMessage");
+const threadMessageDiv = document.getElementById("threadMessage");
+const threadListContainer = document.getElementById("threadListContainer");
+const threadFormContainer = document.getElementById("threadFormContainer");
+const threadView = document.getElementById("threadView");
+const threadsDiv = document.getElementById("threads");
+const repliesDiv = document.getElementById("replies");
+const currentThreadTitle = document.getElementById("currentThreadTitle");
+
+// 状態管理
+let currentThreadId = null;
+let repliesUnsubscribe = null; 
+let authChecked = false; 
+
+function showMessage(div, text, color = "red") { div.style.color = color; div.textContent = text; }
+
+// --- 認証系 ---
+document.getElementById("registerBtn").onclick = async () => {
+  const name = displayNameInput.value.trim(); 
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  showMessage(messageDiv, "");
+  
+  if(!name || !email || !password){ showMessage(messageDiv,"名前、メール、パスワードをすべて入力してください"); return; } 
+  
+  try{
+    const userCredential = await auth.createUserWithEmailAndPassword(email,password);
+    const user = userCredential.user;
+    
+    // ユーザープロフィールに名前を設定 (displayName)
+    await user.updateProfile({ displayName: name });
+    
+    await user.sendEmailVerification();
+    
+    // 登録成功時にフォームをクリア
+    displayNameInput.value = "";
+    emailInput.value = "";
+    passwordInput.value = "";
+    
+    // 認証状態をリセット（サインアウト）し、ログイン画面に切り替える
+    await auth.signOut();
+    
+    // サインアウト後、成功メッセージをログイン画面に表示
+    showMessage(messageDiv,"新規登録完了。確認メールを送信しました。","green");
+    
+  }catch(e){ showMessage(messageDiv,"登録失敗: "+e.message); }
+};
+
+document.getElementById("loginBtn").onclick = async () => {
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  showMessage(messageDiv, "");
+  if(!email||!password){ showMessage(messageDiv,"メールとパスワードを入力してください"); return; }
+  
+  try{ 
+    
+    // 1. まずは永続性 LOCAL で設定してログインを試みる
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    await auth.signInWithEmailAndPassword(email,password);
+    
+  } catch(e) { 
+    // LOCAL設定でエラーが発生した場合の処理
+    console.error("永続性 LOCAL 設定エラー:", e.code, e.message);
+    
+    // 永続性のタイプがサポートされていないエラー（auth/unsupported-persistence-type）または getPersistence のエラーであれば、NONEに切り替えて再試行する
+    if (e.code === 'auth/unsupported-persistence-type' || e.message.includes('auth/unsupported-persistence-type') || e.message.includes('auth.getPersistence is not a function')) {
+      try {
+        await auth.setPersistence(firebase.auth.Auth.Persistence.NONE);
+        await auth.signInWithEmailAndPassword(email,password);
+        showMessage(messageDiv,"ログイン成功。ただし、環境制限のためリロードするとログアウトします。","orange");
+      } catch (retryError) {
+        showMessage(messageDiv,"ログイン失敗: "+retryError.message); 
+      }
+    } else {
+      // その他のログイン失敗エラー
+      showMessage(messageDiv,"ログイン失敗: "+e.message); 
+    }
+  }
+};
+
+document.getElementById("resetBtn").onclick = async () => {
+  const email = emailInput.value.trim();
+  showMessage(messageDiv, "");
+  if(!email){ showMessage(messageDiv,"メールアドレスを入力してください"); return; }
+  try{ await auth.sendPasswordResetEmail(email); showMessage(messageDiv,"リセットメール送信済み","green"); } 
+  catch(e){ showMessage(messageDiv,"送信失敗: "+e.message); }
+};
+
+document.getElementById("logoutBtn").onclick = () => auth.signOut();
+
+// 認証状態変化
+auth.onAuthStateChanged(user => {
+  const mainArea = document.getElementById("mainArea");
+  const authArea = document.getElementById("authArea");
+  
+  if(user && user.emailVerified){
+    authArea.style.display = "none";
+    mainArea.style.display = "block";
+    
+    // スレッド作成フォームにユーザーの登録名 (displayName) をセット
+    document.getElementById("name").value = user.displayName || "匿名";
+    
+    renderThreads(); // ログイン後、スレッド一覧を読み込み
+  } else {
+    authArea.style.display = "block";
+    mainArea.style.display = "none";
+    if (repliesUnsubscribe) repliesUnsubscribe(); // リスナー解除
+    closeThreadView(); // スレッド詳細を閉じる
+  }
+  
+  // 認証チェックが完了したら、画面全体を表示する
+  if (!authChecked) {
+    document.body.style.visibility = "visible";
+    authChecked = true;
+  }
+});
+
+// --- スレッド一覧描画 ---
+function renderThreads() {
+  threadsRef.orderBy("timestamp", "desc").onSnapshot(snapshot => {
+    threadsDiv.innerHTML = "";
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const id = doc.id;
+      const time = data.timestamp ? data.timestamp.toDate().toLocaleString("ja-JP") : "…";
+      const div = document.createElement("div");
+      div.className = "thread-item";
+      div.dataset.id = id;
+      // 投稿者名表示
+      div.innerHTML = `
+        <h3>${data.title}</h3>
+        <div class="thread-meta">スレ主: ${data.name || "匿名"} | 最初の投稿: ${time}</div>
+      `;
+      div.onclick = () => openThread(id, data.title);
+      threadsDiv.appendChild(div);
+    });
+  });
+}
+
+// --- スレッド作成フォーム表示切り替え ---
+document.getElementById("newThreadBtn").onclick = () => {
+  threadFormContainer.style.display = threadFormContainer.style.display === "none" ? "block" : "none";
+  showMessage(threadMessageDiv, "");
+};
+
+// --- スレッド作成 ---
+document.getElementById("createThreadBtn").onclick = async () => {
+  const title = document.getElementById("threadTitle").value.trim();
+  const user = auth.currentUser;
+  const name = user.displayName || "匿名"; 
+  const firstPostText = document.getElementById("firstPostText").value.trim();
+  
+  showMessage(threadMessageDiv, "");
+
+  if (!user || !user.emailVerified) { showMessage(threadMessageDiv, "ログインしてメール認証を完了してください"); return; }
+  if (!title || !firstPostText) { showMessage(threadMessageDiv, "タイトルと本文を入力してください"); return; }
+
+  try {
+    // スレッド（ドキュメント）を作成
+    const newThreadRef = await threadsRef.add({
+      title,
+      name, // 登録名を使用
+      uid: user.uid,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // 最初のレスポンスをサブコレクションに追加
+    await newThreadRef.collection("replies").add({
+      name, // 登録名を使用
+      text: firstPostText,
+      uid: user.uid,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      isOP: true 
+    });
+
+    document.getElementById("threadTitle").value = "";
+    document.getElementById("firstPostText").value = "";
+    threadFormContainer.style.display = "none";
+    
+  } catch (e) { showMessage(threadMessageDiv, "スレッド作成失敗: " + e.message); }
+};
+
+// --- スレッドを開く ---
+function openThread(threadId, title) {
+  currentThreadId = threadId;
+  currentThreadTitle.textContent = title;
+  
+  threadListContainer.style.display = "none";
+  threadFormContainer.style.display = "none"; 
+  threadView.style.display = "block";
+  
+  renderReplies(threadId);
+}
+
+// --- スレッド詳細から一覧に戻る ---
+document.getElementById("backToThreadsBtn").onclick = () => {
+  closeThreadView();
+};
+
+function closeThreadView() {
+  if (repliesUnsubscribe) repliesUnsubscribe();
+  currentThreadId = null;
+  threadView.style.display = "none";
+  threadListContainer.style.display = "block";
+  repliesDiv.innerHTML = "";
+  document.getElementById("replyText").value = "";
+}
+
+// --- レスポンス一覧描画 ---
+function renderReplies(threadId) {
+  // 既存のリスナーを解除
+  if (repliesUnsubscribe) repliesUnsubscribe();
+  
+  const repliesRef = threadsRef.doc(threadId).collection("replies");
+  
+  // 新しいリスナーを設定
+  repliesUnsubscribe = repliesRef.orderBy("timestamp", "asc").onSnapshot(snapshot => {
+    repliesDiv.innerHTML = "";
+    const user = auth.currentUser;
+    let replyCount = 1;
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const id = doc.id;
+      const time = data.timestamp ? data.timestamp.toDate().toLocaleString("ja-JP") : "…";
+      const div = document.createElement("div");
+      div.className = "reply";
+      div.dataset.id = id;
+      
+      const name = data.isOP ? `<span style="color:#007bff; font-weight:bold;">${data.name} (スレ主)</span>` : data.name;
+
+      div.innerHTML = `
+        <div class="name">${replyCount++}: ${name}</div>
+        <div class="time">${time}</div>
+        <div class="content">${escapeHtml(data.text)}</div>
+      `;
+      
+      // 編集・削除ボタンの追加（元の投稿者のUIDと一致する場合）
+      if (user && user.uid === data.uid) {
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "編集";
+        editBtn.className = "btn-sm";
+        editBtn.onclick = () => startEditReply(threadId, id);
+        
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "削除";
+        delBtn.className = "btn-sm btn-del";
+        delBtn.onclick = () => startDeleteReply(threadId, id);
+        
+        div.appendChild(editBtn);
+        div.appendChild(delBtn);
+      }
+      repliesDiv.appendChild(div);
+    });
+  }, error => {
+    console.error("レスポンスの取得エラー:", error);
+  });
+}
+
+// --- レスポンス投稿 ---
+document.getElementById("postReplyBtn").onclick = async () => {
+  // ユーザーの登録名 (displayName) を取得
+  const user = auth.currentUser;
+  const name = user.displayName || "匿名"; 
+  const text = document.getElementById("replyText").value.trim();
+  
+  showMessage(postMessageDiv, "");
+
+  if (!user || !user.emailVerified) { showMessage(postMessageDiv, "ログインしてメール認証を完了してください"); return; }
+  if (!text) { showMessage(postMessageDiv, "本文を入力してください"); return; }
+  if (!currentThreadId) { showMessage(postMessageDiv, "スレッドが選択されていません"); return; }
+  
+  try {
+    const repliesRef = threadsRef.doc(currentThreadId).collection("replies");
+    await repliesRef.add({
+      name, // 登録名を使用
+      text,
+      uid: user.uid,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    document.getElementById("replyText").value = "";
+  } catch (e) { showMessage(postMessageDiv, "投稿失敗: " + e.message); }
+};
+
+// --- レスポンス編集 ---
+function startEditReply(threadId, replyId) {
+  const replyDiv = document.querySelector(`.reply[data-id='${replyId}']`);
+  const contentDiv = replyDiv.querySelector('.content');
+  const oldText = contentDiv.textContent;
+  
+  if (replyDiv.querySelector('textarea')) return; 
+
+  const textarea = document.createElement('textarea');
+  textarea.value = oldText;
+  textarea.style.width = '100%';
+  textarea.style.marginTop = '6px';
+  contentDiv.replaceWith(textarea);
+
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = "保存";
+  saveBtn.className = "btn-sm";
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = "キャンセル";
+  cancelBtn.className = "btn-sm";
+  cancelBtn.style.background = "#ccc";
+
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.marginTop = '6px';
+  buttonContainer.appendChild(saveBtn);
+  buttonContainer.appendChild(cancelBtn);
+  textarea.after(buttonContainer);
+
+  saveBtn.onclick = async () => {
+    const newText = textarea.value.trim();
+    if (!newText) { alert("本文を入力してください。"); return; }
+    try { 
+      // サブコレクション内のドキュメントを更新
+      await threadsRef.doc(threadId).collection("replies").doc(replyId).update({ text: newText }); 
+      // onSnapshotで自動的に更新される
+    } catch (e) { console.error("編集エラー: " + e.message); }
+  };
+  
+  cancelBtn.onclick = () => {
+    // 元の表示に戻す
+    buttonContainer.remove();
+    const newContentDiv = document.createElement('div');
+    newContentDiv.className = 'content';
+    newContentDiv.innerHTML = escapeHtml(oldText);
+    textarea.replaceWith(newContentDiv);
+  };
+}
+
+// --- レスポンス削除 ---
+function startDeleteReply(threadId, replyId) {
+  const replyDiv = document.querySelector(`.reply[data-id='${replyId}']`);
+  if(replyDiv.querySelector('.confirm-box')) return;
+  
+  const confirmDiv = document.createElement('div');
+  confirmDiv.className = 'confirm-box';
+  confirmDiv.innerHTML = `
+    <div style="margin-top:6px;">本当に削除しますか？</div>
+    <div style="margin-top:6px;">
+      <button class="btn-sm" style="background:#f0ad4e;">はい</button>
+      <button class="btn-sm" style="background:#ccc;">キャンセル</button>
+    </div>
+  `;
+  replyDiv.appendChild(confirmDiv);
+  
+  const [yesBtn, noBtn] = confirmDiv.querySelectorAll('button');
+  
+  yesBtn.onclick = async () => {
+    try { 
+      // サブコレクション内のドキュメントを削除
+      await threadsRef.doc(threadId).collection("replies").doc(replyId).delete(); 
+    } 
+    catch(e){ console.error("削除エラー: "+e.message); }
+    confirmDiv.remove();
+  };
+  
+  noBtn.onclick = () => confirmDiv.remove();
+}
+
+// HTMLエスケープ関数
+function escapeHtml(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/[&<>"']/g, function(match) {
+    const replacements = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return replacements[match];
+  }).replaceAll('\n', '<br>');
+}
+</script>
+</body>
+</html>
